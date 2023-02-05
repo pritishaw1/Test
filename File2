@@ -1,0 +1,55 @@
+# Import necessary libraries
+import pandas as pd
+from sklearn.preprocessing import LabelEncoder
+from keras.utils import np_utils
+from keras.models import Sequential
+from keras.layers import LSTM, Dense
+from sklearn.model_selection import train_test_split
+
+# Load the dataset
+df = pd.read_csv('customer_journey.csv')
+
+# Pre-processing
+# Convert membershipNumber to categorical
+df['membershipNumber'] = df['membershipNumber'].astype('category')
+df['membershipNumber'] = df['membershipNumber'].cat.codes
+
+# Encode miniApp column
+le = LabelEncoder()
+df['miniApp'] = le.fit_transform(df['miniApp'])
+
+# Convert dateTime to datetime format
+df['dateTime'] = pd.to_datetime(df['dateTime'])
+
+# Create new features from dateTime
+df['hour'] = df['dateTime'].dt.hour
+df['day'] = df['dateTime'].dt.day
+df['month'] = df['dateTime'].dt.month
+df['year'] = df['dateTime'].dt.year
+
+# Group the dataset by membershipNumber and miniApp
+df_grouped = df.groupby(['membershipNumber', 'miniApp']).size().reset_index(name='counts')
+
+# One-hot encode the miniApp column
+df_grouped = pd.get_dummies(df_grouped, columns=['miniApp'])
+
+# Split the dataset into features and target
+X = df_grouped.drop(['counts'], axis=1)
+y = df_grouped['counts']
+
+# Split the dataset into train and test sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Build the model
+model = Sequential()
+model.add(LSTM(32, input_shape=(X_train.shape[1], 1)))
+model.add(Dense(len(le.classes_), activation='softmax'))
+model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+# Train the model
+model.fit(X_train, y_train, epochs=50, batch_size=32)
+
+# Evaluate the model
+score, acc = model.evaluate(X_test, y_test, batch_size=32)
+print('Test score:', score)
+print('Test accuracy:', acc)
