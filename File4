@@ -1,0 +1,49 @@
+import numpy as np
+import pandas as pd
+from keras.layers import Embedding, LSTM, Dense
+from keras.models import Sequential
+
+# Load data into a pandas dataframe
+df = pd.read_csv("customer_journey.csv")
+
+# Create a dictionary to map each miniApp to a unique integer
+miniApp_to_int = {miniApp: ii for ii, miniApp in enumerate(set(df['miniApp']), 1)}
+
+# Use the dictionary to convert the miniApps into integers
+df['miniApp_id'] = df['miniApp'].apply(lambda x: miniApp_to_int[x])
+
+# Create a list of lists, where each list represents a customer's journey
+journeys = []
+for customer_id, customer_df in df.groupby('membershipNumber'):
+    journey = list(customer_df['miniApp_id'].values)
+    journeys.append(journey)
+
+# Convert the list of journeys into a numpy array
+journeys = np.array(journeys)
+
+# Pad the journeys so that all journeys have the same length
+max_len = max([len(journey) for journey in journeys])
+padded_journeys = np.array([journey + [0] * (max_len - len(journey)) for journey in journeys])
+
+# Create the training inputs and outputs
+X = padded_journeys[:, :-1]
+y = padded_journeys[:, -1]
+
+# Create the LSTM model
+model = Sequential()
+model.add(Embedding(input_dim=len(miniApp_to_int) + 1, output_dim=10, input_length=max_len - 1))
+model.add(LSTM(32))
+model.add(Dense(len(miniApp_to_int) + 1, activation='softmax'))
+model.compile(loss='sparse_categorical_crossentropy', optimizer='adam')
+
+# Train the model
+model.fit(X, y, epochs=100)
+
+# Use the trained model to make predictions for a specific customer's journey
+customer_journey = [miniApp_to_int[miniApp] for miniApp in ['login', 'invest', 'transfer']]
+padded_journey = np.array([customer_journey + [0] * (max_len - len(customer_journey))])[:, :-1]
+prediction = model.predict(padded_journey).argmax()
+
+# Use the dictionary to convert the prediction back into the original miniApp name
+predicted_miniApp = [miniApp for miniApp, miniApp_id in miniApp_to_int.items() if miniApp_id == prediction][0]
+print("The customer is predicted to go to the {} miniApp after logging in".format(predicted_miniApp))
