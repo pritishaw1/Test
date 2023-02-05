@@ -1,0 +1,42 @@
+import pandas as pd
+from sklearn.preprocessing import LabelEncoder
+from keras.preprocessing.sequence import TimeseriesGenerator
+from keras.models import Sequential
+from keras.layers import LSTM, Dense
+
+# load the dataset
+df = pd.read_csv("your_dataset.csv")
+
+# encode the membershipnumber and miniApp columns
+le_membershipnumber = LabelEncoder()
+df['membershipnumber'] = le_membershipnumber.fit_transform(df['membershipnumber'])
+le_miniApp = LabelEncoder()
+df['miniApp'] = le_miniApp.fit_transform(df['miniApp'])
+
+# create a sequence of miniApp journey for each customer
+n_input = 2
+sequences = []
+for i in range(n_input, df.shape[0]):
+    sequence = df[i-n_input:i]['miniApp'].values
+    sequences.append(sequence)
+
+# split the data into training and testing sets
+n_features = 1
+generator = TimeseriesGenerator(sequences, sequences, length=n_input, batch_size=1)
+
+# create the model
+model = Sequential()
+model.add(LSTM(50, activation='relu', input_shape=(n_input, n_features)))
+model.add(Dense(1))
+model.compile(optimizer='adam', loss='mse')
+
+# fit the model
+model.fit_generator(generator, epochs=100)
+
+# make predictions
+inputs = df[-n_input:]['miniApp'].values
+inputs = inputs.reshape((1, n_input, n_features))
+prediction = model.predict(inputs)
+predicted_miniApp = le_miniApp.inverse_transform(prediction.round())
+
+print("The most likely miniApp journey that the customer will perform next: ", predicted_miniApp)
