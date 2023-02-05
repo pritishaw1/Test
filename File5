@@ -1,0 +1,44 @@
+import pandas as pd
+import numpy as np
+from keras.preprocessing.sequence import TimeseriesGenerator
+from keras.layers import LSTM, Dense
+from keras.models import Sequential
+from sklearn.model_selection import train_test_split
+
+# Load the dataset into a pandas DataFrame
+data = pd.read_csv('journey_data.csv')
+
+# Convert the miniApps column into categorical variables and store the mapping
+data['miniApps'] = pd.Categorical(data['miniApps'])
+miniApps_mapping = dict(enumerate(data['miniApps'].cat.categories))
+data['miniApps'] = data['miniApps'].cat.codes
+
+# Split the data into train and test sets
+train_data, test_data = train_test_split(data, test_size=0.2)
+
+# Generate a sequence of miniApps visited by each customer using the membershipNumber
+journey_sequences = []
+for membership_number in train_data['membershipNumber'].unique():
+    customer_journey = train_data[train_data['membershipNumber'] == membership_number]['miniApps'].values
+    journey_sequences.append(customer_journey[1:]) # exclude the first miniApp visited after login
+
+# Create a TimeseriesGenerator object with the journey sequences
+sequence_length = 10
+sequence_gen = TimeseriesGenerator(journey_sequences, journey_sequences, length=sequence_length, batch_size=1)
+
+# Build the LSTM model
+model = Sequential()
+model.add(LSTM(50, activation='relu', input_shape=(sequence_length, 1)))
+model.add(Dense(len(miniApps_mapping), activation='softmax'))
+model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+# Train the model
+model.fit_generator(sequence_gen, epochs=50)
+
+# Use the trained model to make predictions on the test set
+journey_sequences_test = []
+for membership_number in test_data['membershipNumber'].unique():
+    customer_journey = test_data[test_data['membershipNumber'] == membership_number]['miniApps'].values
+    journey_sequences_test.append(customer_journey[1:])
+sequence_gen_test = TimeseriesGenerator(journey_sequences_test, journey_sequences_test, length=sequence_length, batch_size=1)
+model.evaluate_generator(sequence_gen_test)
