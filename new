@@ -1,0 +1,46 @@
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+from keras.models import Sequential
+from keras.layers import LSTM, Dense
+
+# load the customer data
+data = pd.read_csv('customer_data.csv')
+
+# encode the miniApp feature
+le = LabelEncoder()
+data['miniApp'] = le.fit_transform(data['miniApp'])
+onehot_encoder = OneHotEncoder(sparse=False)
+data = onehot_encoder.fit_transform(data[['miniApp']])
+
+# create the dataset
+def create_dataset(data, look_back):
+    dataX, dataY = [], []
+    for i in range(len(data) - look_back):
+        dataX.append(data[i:(i + look_back)])
+        dataY.append(data[i + look_back])
+    return np.array(dataX), np.array(dataY)
+
+# define the RNN model
+def build_model():
+    model = Sequential()
+    model.add(LSTM(16, input_shape=(look_back, data.shape[1])))
+    model.add(Dense(data.shape[1], activation='softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer='adam')
+    return model
+
+# create the dataset
+look_back = 3
+X, Y = create_dataset(data, look_back)
+
+# build the model
+model = build_model()
+
+# fit the model on the training data
+model.fit(X, Y, epochs=200, batch_size=1, verbose=0)
+
+# predict the next miniApp that the customer will use
+next_miniApp = model.predict(np.array([data[-look_back:]]), verbose=0)
+next_miniApp = np.argmax(next_miniApp, axis=1)
+next_miniApp = le.inverse_transform([next_miniApp])
+print("The next miniApp that the customer will use is:", next_miniApp[0])
