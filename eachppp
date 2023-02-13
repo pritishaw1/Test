@@ -1,0 +1,38 @@
+import pandas as pd
+from datetime import datetime, timedelta
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
+
+# load data from CSV file
+df = pd.read_csv('my_dataset.csv')
+
+# convert dateTime column to datetime format
+df['dateTime'] = pd.to_datetime(df['dateTime'])
+
+# sort by MembershipID and dateTime
+df = df.sort_values(['MembershipID', 'dateTime'])
+
+# add a new column for the date only
+df['date'] = df['dateTime'].dt.date
+
+# keep only the first miniApp used for each MembershipID and date
+df = df.groupby(['MembershipID', 'date'], as_index=False).first()
+
+# split data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(df.drop(columns=['miniApp']), df['miniApp'], test_size=0.2, random_state=42)
+
+# train a decision tree classifier
+clf = DecisionTreeClassifier()
+clf.fit(X_train, y_train)
+
+# make predictions on the test set
+y_pred = clf.predict(X_test)
+
+# evaluate model accuracy
+accuracy = (y_pred == y_test).mean()
+print(f"Model accuracy: {accuracy:.2f}")
+
+# make a prediction for a new customer
+new_customer = pd.DataFrame({'MembershipID': [4004]})
+next_miniApp = clf.predict(new_customer)[0]
+print(f"Next miniApp for new customer: {next_miniApp}")
