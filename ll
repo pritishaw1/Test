@@ -1,29 +1,35 @@
 import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.metrics.pairwise import cosine_similarity
+from surprise import SVD, Dataset, Reader
 
 # Load dataset
 data = pd.read_csv('customer_purchases.csv')
 
+# Convert data to Surprise format
+reader = Reader(rating_scale=(1, 5))
+data = Dataset.load_from_df(data[['memberid', 'product', 'date']], reader)
+
 # Split data into training and test sets
-train_data, test_data = train_test_split(data, test_size=0.2)
+train_data = data.build_full_trainset()
+test_data = train_data.build_anti_testset()
 
-# Create a pivot table to represent user-item interactions
-user_item_matrix = train_data.pivot_table(index='memberid', columns='product', values='date').fillna(0)
+# Train a SVD model on the training data
+model = SVD()
+model.fit(train_data)
 
-# Compute cosine similarity between user-item matrix
-item_similarity = cosine_similarity(user_item_matrix.T)
+# Make a prediction for the test data
+predictions = model.test(test_data)
 
-# Define a function to make recommendations for a given user
-def get_recommendations(user_id, top_n):
-    user_items = user_item_matrix.loc[user_id,:]
-    scores = item_similarity.dot(user_items)
-    scores = scores.sort_values(ascending=False)
-    top_items = scores.iloc[:top_n].index
-    return top_items
+# Group predictions by user ID and sort by predicted rating
+user_predictions = {}
+for uid, iid, true_r, est, _ in predictions:
+    if uid not in user_predictions:
+        user_predictions[uid] = []
+    user_predictions[uid].append((iid, est))
+for uid, ratings in user_predictions.items():
+    ratings.sort(key=lambda x: x[1], reverse=True)
 
-# Make a recommendation for a given user
+# Print the top predicted items for a given user
 user_id = '1234'
 top_n = 5
-recommended_items = get_recommendations(user_id, top_n)
-print(recommended_items)
+top_items = [iid for (iid, _) in user_predictions[user_id][:top_n]]
+print(top_items)
