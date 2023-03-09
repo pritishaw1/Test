@@ -1,0 +1,380 @@
+import pandas as pd
+import statsmodels.api as sm
+
+# Load the dataset into a pandas DataFrame
+data = pd.read_csv('customer_login_data.csv')
+
+# Convert the dateTime column to a datetime format and set it as the index
+data['dateTime'] = pd.to_datetime(data['dateTime'])
+data.set_index('dateTime', inplace=True)
+
+# Resample the data to a daily frequency and fill missing values with 0
+data = data.groupby('customer id').resample('D').count().fillna(0)
+
+# Fit a SARIMA model to the data
+model = sm.tsa.statespace.SARIMAX(data, order=(1, 1, 1), seasonal_order=(0, 1, 1, 7))
+results = model.fit()
+
+# Make predictions for the next 7 days for each customer
+forecast = results.forecast(steps=7 * len(data.index.levels[0]))
+
+# Convert the forecast to a pandas DataFrame and reset the index
+forecast = forecast.reset_index()
+forecast['customer id'] = forecast['customer id'].astype(int)
+
+# Select the columns we need and rename them
+forecast = forecast[['customer id', 'dateTime']]
+forecast.columns = ['customer id', 'next_login']
+
+# Convert the next_login column to a datetime format
+forecast['next_login'] = pd.to_datetime(forecast['next_login'])
+
+# Display the forecast for the next login dateTime session for each customer
+print(forecast)
+
+
+
+
+import pandas as pd
+import numpy as np
+import statsmodels.api as sm
+
+# Load the data
+data = pd.read_csv('login_data.csv')
+
+# Convert the dateTime column to a datetime type
+data['dateTime'] = pd.to_datetime(data['dateTime'])
+
+# Group the data by customer_id and aggregate the login times into a list
+grouped_data = data.groupby('customer_id')['dateTime'].agg(list)
+
+# Create a new DataFrame with columns for the customer_id, the login times as a list, and the next login time
+df = pd.DataFrame({'customer_id': grouped_data.index, 'login_times': grouped_data.values})
+
+# Define a function to predict the next login time for a given customer
+def predict_next_login_time(customer_id):
+    # Get the customer's login times
+    login_times = df.loc[df['customer_id'] == customer_id, 'login_times'].iloc[0]
+    
+    # Convert the login times to a time series
+    time_series = pd.Series(np.ones(len(login_times)), index=pd.to_datetime(login_times))
+    
+    # Train a SARIMAX model on the time series
+    model = sm.tsa.statespace.SARIMAX(time_series, order=(1, 1, 1), seasonal_order=(0, 1, 1, 7))
+    results = model.fit()
+    
+    # Use the model to predict the next login time
+    next_login_time = results.forecast()[0]
+    
+    return next_login_time
+
+# Test the function on a sample customer
+customer_id = 'A001'
+next_login_time = predict_next_login_time(customer_id)
+print(f"Next login time for customer {customer_id}: {next_login_time}")
+
+
+
+
+
+
+
+from keras.layers import Input, LSTM, Dense
+from keras.models import Model
+import numpy as np
+
+# define the input sequence length and the number of actions
+seq_length = 10
+num_actions = 5
+
+# define the encoder input and LSTM layer
+encoder_inputs = Input(shape=(None, num_actions))
+encoder_lstm = LSTM(128, return_state=True)
+
+# run the encoder LSTM on the input sequence
+encoder_outputs, state_h, state_c = encoder_lstm(encoder_inputs)
+encoder_states = [state_h, state_c]
+
+# define the decoder input and LSTM layer
+decoder_inputs = Input(shape=(None, num_actions))
+decoder_lstm = LSTM(128, return_sequences=True, return_state=True)
+
+# run the decoder LSTM on the output sequence with the encoder states
+decoder_outputs, _, _ = decoder_lstm(decoder_inputs, initial_state=encoder_states)
+
+# define the dense layer to output the next action prediction
+decoder_dense = Dense(num_actions, activation='softmax')
+decoder_outputs = decoder_dense(decoder_outputs)
+
+# define the model with the input and output layers
+model = Model([encoder_inputs, decoder_inputs], decoder_outputs)
+
+# compile the model with the categorical cross-entropy loss and Adam optimizer
+model.compile(loss='categorical_crossentropy', optimizer='adam')
+
+# define a function to generate the training data
+def generate_data(data, seq_length, num_actions):
+    num_samples = len(data) - seq_length - 1
+    encoder_input_data = np.zeros((num_samples, seq_length, num_actions), dtype='float32')
+    decoder_input_data = np.zeros((num_samples, seq_length, num_actions), dtype='float32')
+    decoder_target_data = np.zeros((num_samples, seq_length, num_actions), dtype='float32')
+    for i in range(num_samples):
+        encoder_input_data[i,:,:] = data[i:i+seq_length,:]
+        decoder_input_data[i,:,:] = data[i+1:i+seq_length+1,:]
+        decoder_target_data[i,:,:] = data[i+1:i+seq_length+1,:]
+    return ([encoder_input_data, decoder_input_data], decoder_target_data)
+
+# generate the training data
+data = np.random.randint(num_actions, size=(100, seq_length))
+train_data, train_target = generate_data(data, seq_length, num_actions)
+
+# train the model for 100 epochs
+model.fit(train_data, train_target, epochs=100, validation_split=0.2)
+
+
+
+
+
+from keras.layers import Input, LSTM, Dense
+from keras.models import Model
+import numpy as np
+
+# define the input sequence length, the number of actions, and the number of customers
+seq_length = 10
+num_actions = 5
+num_customers = 100
+
+# define the encoder input and LSTM layer
+encoder_inputs = Input(shape=(None, num_actions))
+encoder_lstm = LSTM(128, return_state=True)
+
+# run the encoder LSTM on the input sequence
+encoder_outputs, state_h, state_c = encoder_lstm(encoder_inputs)
+encoder_states = [state_h, state_c]
+
+# define the decoder input and LSTM layer
+decoder_inputs = Input(shape=(None, num_actions))
+decoder_lstm = LSTM(128, return_sequences=True, return_state=True)
+
+# run the decoder LSTM on the output sequence with the encoder states
+decoder_outputs, _, _ = decoder_lstm(decoder_inputs, initial_state=encoder_states)
+
+# define the dense layer to output the next action prediction
+decoder_dense = Dense(num_actions, activation='softmax')
+decoder_outputs = decoder_dense(decoder_outputs)
+
+# define the model with the input and output layers
+model = Model([encoder_inputs, decoder_inputs], decoder_outputs)
+
+# compile the model with the categorical cross-entropy loss and Adam optimizer
+model.compile(loss='categorical_crossentropy', optimizer='adam')
+
+def generate_data(data, seq_length, num_actions, num_customers):
+    num_features = data.shape[1] - 1 # excluding the customerid column
+    encoder_input_data = np.zeros((num_customers*(len(data)-seq_length-1), seq_length, num_actions), dtype='float32')
+    decoder_input_data = np.zeros((num_customers*(len(data)-seq_length-1), seq_length, num_features), dtype='float32')
+    decoder_target_data = np.zeros((num_customers*(len(data)-seq_length-1), seq_length, num_actions), dtype='float32')
+    
+    # drop the dateTime column from the dataframe
+    data = data.drop('dateTime', axis=1)
+    
+    sample_idx = 0
+    for customer_id in data['customerid'].unique():
+        customer_data = data[data['customerid'] == customer_id].iloc[:,1:]
+        num_samples_customer = len(customer_data) - seq_length - 1
+        for i in range(num_samples_customer):
+            encoder_input_data[sample_idx,:,:num_actions] = customer_data.iloc[i:i+seq_length,:num_actions].values
+            decoder_input_data[sample_idx,:,:num_features] = customer_data.iloc[i:i+seq_length,:].values
+            decoder_target_data[sample_idx,:,:num_actions] = customer_data.iloc[i+1:i+seq_length+1,:num_actions].values
+            sample_idx += 1
+            
+    return encoder_input_data, decoder_input_data, decoder_target_data
+
+train_data, train_target = generate_data(data, seq_length, num_actions, num_customers)
+
+# train the model for 100 epochs
+model.fit(train_data, train_target, epochs=100, validation_split=0.2)
+
+
+
+sequence - 
+
+import pandas as pd
+import numpy as np
+from keras.models import Sequential
+from keras.layers import LSTM, Dense
+
+
+# create a dictionary to map actions to integers
+action_to_int = {}
+int_to_action = {}
+for i, action in enumerate(set(data['actions'])):
+    action_to_int[action] = i
+    int_to_action[i] = action
+
+# convert actions to integers
+data['actions'] = data['actions'].apply(lambda x: action_to_int[x])
+
+# create sequences of customer-action pairs
+max_seq_length = 10
+seqs = []
+targets = []
+for cust in set(data['customer_id']):
+    cust_data = data[data['customer_id'] == cust].reset_index(drop=True)
+    for i in range(len(cust_data) - max_seq_length):
+        seq = cust_data.loc[i:i+max_seq_length-1, 'actions'].values
+        target = cust_data.loc[i+max_seq_length, 'actions']
+        seqs.append(seq)
+        targets.append(target)
+        
+# convert sequences and targets to numpy arrays
+X = np.array(seqs)
+y = np.array(targets)
+
+# create the LSTM model
+model = Sequential()
+model.add(LSTM(128, input_shape=(max_seq_length, 1)))
+model.add(Dense(len(action_to_int), activation='softmax'))
+
+model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+# train the model
+model.fit(X.reshape((-1, max_seq_length, 1)), y, epochs=10, batch_size=64)
+
+# predict the next action for a given sequence
+def predict_next_action(seq):
+    seq = np.array(seq).reshape((1, max_seq_length, 1))
+    prediction = model.predict(seq)[0]
+    predicted_action = int_to_action[np.argmax(prediction)]
+    return predicted_action
+
+def predict_next_action_for_customer(customer_id):
+    # filter the data for the given customer
+    customer_data = data[data['customer_id'] == customer_id].reset_index(drop=True)
+    # get the last 10 actions for the customer
+    seq = customer_data.tail(max_seq_length)['actions'].values.tolist()
+    # predict the next action using the model
+    predicted_action = predict_next_action(seq)
+    return predicted_action
+
+
+import pandas as pd
+import numpy as np
+from keras.models import Sequential
+from keras.layers import LSTM, Dense
+
+
+# create a dictionary to map actions to integers
+action_to_int = {}
+int_to_action = {}
+for i, action in enumerate(set(data['actions'])):
+    action_to_int[action] = i
+    int_to_action[i] = action
+
+# convert actions to integers
+data['actions'] = data['actions'].apply(lambda x: action_to_int[x])
+
+# create sequences of customer-action pairs
+max_seq_length = 10
+seqs = []
+targets = []
+for cust in set(data['customer_id']):
+    cust_data = data[data['customer_id'] == cust].reset_index(drop=True)
+    for i in range(len(cust_data) - max_seq_length):
+        seq = cust_data.loc[i:i+max_seq_length-1, 'actions'].values
+        target = cust_data.loc[i+max_seq_length, 'actions']
+        seqs.append(seq)
+        targets.append(target)
+
+# convert sequences and targets to numpy arrays
+X = np.array(seqs)
+y = np.array(targets)
+
+# create the LSTM model
+model = Sequential()
+model.add(LSTM(128, input_shape=(max_seq_length, 1)))
+model.add(Dense(len(action_to_int), activation='softmax'))
+
+model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+# train the model
+model.fit(X.reshape((-1, max_seq_length, 1)), y, epochs=10, batch_size=64)
+
+# predict the probability scores for all actions based on a given sequence
+def predict_action_probabilities(seq):
+    seq = np.array(seq).reshape((1, max_seq_length, 1))
+    prediction = model.predict(seq)[0]
+    action_probabilities = {int_to_action[i]: prediction[i] for i in range(len(prediction))}
+    return action_probabilities
+
+
+
+Propensity modeling is a type of statistical analysis that predicts the likelihood of an individual or a group of individuals to take a particular action or engage in a particular behavior.
+
+The process of propensity modeling involves collecting and analyzing data from various sources, including demographic, behavioral, and historical data, to identify patterns and trends that can help predict future behavior. This analysis is then used to build a predictive model that can estimate the probability of future behavior for a particular individual or group.
+
+Propensity models are commonly used in marketing and advertising to identify potential customers who are most likely to respond to a particular campaign or offer. By targeting individuals who are most likely to take a particular action, companies can optimize their marketing efforts and increase the effectiveness of their campaigns. Propensity modeling can also be used in other fields, such as healthcare and finance, to predict patient behavior or financial risk, respectively.
+
+
+
+import pandas as pd
+from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import train_test_split
+import xgboost as xgb
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+
+# Load the data
+# data = pd.read_csv('data.csv')
+
+# Encode the categorical variable
+le = LabelEncoder()
+data['actions'] = le.fit_transform(data['actions'])
+
+# Feature engineering
+action_counts = data.groupby('customer_id')['actions'].value_counts().unstack(fill_value=0)
+action_counts.columns = [f'action_{col}' for col in action_counts.columns]
+data = pd.concat([data, action_counts], axis=1)
+
+data['time_since_last_action'] = data.groupby('customer_id')['date'].diff().dt.days.fillna(0)
+data['recency_action_0'] = (data['actions'] == 0).groupby(data['customer_id']).cumsum().astype(int)
+data['recency_action_1'] = (data['actions'] == 1).groupby(data['customer_id']).cumsum().astype(int)
+data['recency_action_2'] = (data['actions'] == 2).groupby(data['customer_id']).cumsum().astype(int)
+
+data['avg_time_between_actions'] = data.groupby('customer_id')['time_since_last_action'].transform('mean')
+
+data['num_actions'] = data.groupby('customer_id')['actions'].transform('count')
+
+# Split the data into training and testing sets
+data = data.drop(['date'], axis=1)
+X, y = data.drop('actions',axis=1), data.actions
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=44)
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+
+# Train the model
+model = xgb.XGBClassifier()
+model.fit(X_train, y_train)
+
+# Evaluate the model
+y_pred = model.predict(X_test)
+acc = accuracy_score(y_test, y_pred)
+prec = precision_score(y_test, y_pred, average='weighted')
+rec = recall_score(y_test, y_pred, average='weighted')
+f1 = f1_score(y_test, y_pred, average='weighted')
+
+print('Accuracy:', acc)
+print('Precision:', prec)
+print('Recall:', rec)
+print('F1-score:', f1)
+
+
+The code starts by grouping the data by customer ID and action type and then computing the count of each action type for each customer. The resulting counts are then unstacked and concatenated with the original data along the column axis, effectively adding new columns to the data that indicate the number of each action type for each customer.
+
+The code also creates several new features based on the time between actions and the recency of each action type. For example, the "time_since_last_action" feature computes the number of days between each customer's most recent action and the current action. The "recency_action_X" features compute the number of actions of each type that a customer has taken since their most recent action of that type.
+
+Finally, the code computes the average time between actions and the total number of actions for each customer, both of which could be useful features for predicting customer behavior.
+
+
+
+
+
